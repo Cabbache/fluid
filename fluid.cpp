@@ -216,6 +216,7 @@ class PhyBox {
 		float *dvg = new float[W * H];
 		divergence(dvg);
 		jacobi(p, dvg, -1, 4);
+		delete[] dvg;
 	}
 };
 
