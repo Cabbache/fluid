@@ -10,6 +10,8 @@
 
 #include <cassert>
 
+#include <chrono>
+
 using namespace std;
 
 typedef unsigned int uint;
@@ -284,8 +286,9 @@ int main() {
 
 	bool running = true;
 	SDL_Event event;
-	int tick = 0;
 
+	std::chrono::steady_clock::time_point tick = std::chrono::steady_clock::now();
+	uint ctr = 0;
 	while (running) {
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
@@ -298,16 +301,20 @@ int main() {
 			}
 		}
 
-		pb.forward();
+		pb.forward(1);
 		pb.updateBuffer(buffer);
 
-		SDL_UpdateTexture(texture, nullptr, buffer,
-						  pb.width() * sizeof(uint32_t));
+		SDL_UpdateTexture(texture, nullptr, buffer, pb.width() * sizeof(uint32_t));
 		SDL_RenderClear(renderer);
 		SDL_RenderCopy(renderer, texture, nullptr, nullptr);
 		SDL_RenderPresent(renderer);
-		SDL_Delay(16);
-		tick++;
+
+		if (++ctr % 100 == 0) {
+			std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+			uint us = std::chrono::duration_cast<std::chrono::microseconds>(now - tick).count();
+			cout << "fps: " << 100000000.0/us << endl;
+			tick = std::chrono::steady_clock::now();
+		}
 	}
 
 	// Clean up
