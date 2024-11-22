@@ -123,10 +123,10 @@ class PhyBox {
 		}
 	}
 
-	void impulse(uint x, uint y) {
+	void impulse(uint x, uint y, uint fx, uint fy) {
 		for (uint i = 0;i < 100;++i)
 		for (uint j = 0;j < 100;++j)
-			v[(x+i)*H + y+j] += Vector2(10,0);
+			v[(x+i)*H + y+j] += Vector2(fx,fy);
 	}
 
 	void forward(float dt = 1) {
@@ -225,7 +225,17 @@ struct Params {
 };
 
 void handle_click(SDL_MouseButtonEvent &e, PhyBox &pb) {
-	pb.impulse(e.x,e.y);
+	cout << (uint)e.button << endl;
+	switch (e.button) {
+		case 1: //left click
+			pb.impulse(e.x,e.y,30,0);
+			cout << "applied X impulse" << endl;
+			break;
+		case 3: //right click
+			pb.impulse(e.x,e.y,0,30);
+			cout << "applied Y impulse" << endl;
+			break;
+	}
 }
 
 int main() {
