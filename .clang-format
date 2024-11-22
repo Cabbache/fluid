@@ -1,0 +1,6 @@
+BasedOnStyle: llvm  # Adjust to preferred base style if needed
+IndentWidth: 4      # Set the width for each level of indentation
+TabWidth: 4         # Set the visual width of a tab character
+UseTab: Always      # Use hard tabs for indentation
+IndentCaseLabels: true  # Indent case labels (if using switch statements)
+BreakBeforeBraces: Attach  
