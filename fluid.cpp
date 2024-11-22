@@ -225,7 +225,6 @@ struct Params {
 };
 
 void handle_click(SDL_MouseButtonEvent &e, PhyBox &pb) {
-	cout << (uint)e.button << endl;
 	switch (e.button) {
 		case 1: //left click
 			pb.impulse(e.x,e.y,30,0);
@@ -242,12 +241,12 @@ int main() {
 	Params params;
 	params.viscosity = 0.005;
 	params.shc = 1;
-	PhyBox pb(800, 600);
+	PhyBox pb(400, 400);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 		printf("error initializing SDL: %s\n", SDL_GetError());
 	SDL_Window *window =
-		SDL_CreateWindow("GAME", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+		SDL_CreateWindow("FLUID", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 						 pb.width(), pb.height(), 0);
 
 	SDL_Renderer *renderer =
