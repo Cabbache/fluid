@@ -126,7 +126,7 @@ class PhyBox {
 	void impulse(uint x, uint y, uint fx, uint fy) {
 		for (uint i = 0;i < 100;++i)
 		for (uint j = 0;j < 100;++j)
-			v[(x+i)*H + y+j] += Vector2(fx,fy);
+			v[(min(x+i,W-1))*H + min(y+j,H-1)] += Vector2(fx,fy);
 	}
 
 	void forward(float dt = 1) {
@@ -167,10 +167,16 @@ class PhyBox {
 	}
 
 	Vector2 lerp_index(const Vector2 &index) {
-		uint xl = (uint)floor(index.x);
-		uint xh = (uint)ceil(index.x);
-		uint yl = (uint)floor(index.y);
-		uint yh = (uint)ceil(index.y);
+		int xl = (int)floor(index.x);
+		int xh = (int)ceil(index.x);
+		int yl = (int)floor(index.y);
+		int yh = (int)ceil(index.y);
+
+		//TODO
+		xl = min(max(xl,0),(int)W-1);
+		xh = min(max(xh,0),(int)W-1);
+		yl = min(max(yl,0),(int)H-1);
+		yh = min(max(yh,0),(int)H-1);
 
 		assert(xl >= 0 && xl < W);
 		assert(xh >= 0 && xh < W);
