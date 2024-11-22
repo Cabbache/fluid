@@ -12,19 +12,6 @@ using namespace std;
 
 typedef unsigned int uint;
 
-void updateBuffer(uint32_t *buffer, int width, int height, int tick) {
-	for (int y = 0; y < height; ++y) {
-		for (int x = 0; x < width; ++x) {
-			// Create a simple animation pattern by manipulating pixel values
-			uint8_t r = static_cast<uint8_t>((x + tick) % 256);
-			uint8_t g = static_cast<uint8_t>((y + tick) % 256);
-			uint8_t b = static_cast<uint8_t>((x + y + tick) % 256);
-			buffer[y * width + x] =
-				(r << 16) | (g << 8) | b; // Pack RGB into a 32-bit integer
-		}
-	}
-}
-
 struct Vector2 {
 	float x, y;
 	Vector2(float _x = 0, float _y = 0) : x(_x), y(_y) {}
@@ -33,6 +20,9 @@ struct Vector2 {
 	}
 	Vector2 operator-(const Vector2 &other) const {
 		return Vector2(x - other.x, y - other.y);
+	}
+	float mag2() {
+		return x*x + y*y;
 	}
 	friend ostream &operator<<(ostream &os, const Vector2 &vec) {
 		os << "(" << vec.x << ", " << vec.y << ")";
@@ -78,6 +68,10 @@ class PhyBox {
 	PhyBox(uint width, uint height) : W(width), H(height) {
 		v = new Vector2[W * H];
 		p = new float[W * H];
+	}
+
+	float getmag2(uint x, uint y) {
+		return v[x*H + y].mag2();
 	}
 
 	void forward(float dt = 1) {
@@ -170,6 +164,19 @@ class PhyBox {
 	}
 };
 
+void updateBuffer(uint32_t *buffer, PhyBox *pb) {
+	for (uint y = 0; y < pb->height(); ++y) {
+		for (uint x = 0; x < pb->width(); ++x) {
+			cout << pb->getmag2(x,y) << endl;
+			uint8_t r = static_cast<uint8_t>((uint)pb->getmag2(x,y) % 256);
+			uint8_t g = static_cast<uint8_t>((uint)pb->getmag2(x,y) % 256);
+			uint8_t b = static_cast<uint8_t>((uint)pb->getmag2(x,y) % 256);
+			buffer[y * pb->width() + x] =
+				(r << 16) | (g << 8) | b; // Pack RGB into a 32-bit integer
+		}
+	}
+}
+
 struct Params {
 	float viscosity;
 	float shc;
@@ -179,11 +186,7 @@ int main() {
 	Params params;
 	params.viscosity = 0.005;
 	params.shc = 1;
-
-	PhyBox pb(800, 600);
-	pb.forward();
-	pb.forward();
-	pb.forward();
+	PhyBox pb(200, 150);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 		printf("error initializing SDL: %s\n", SDL_GetError());
@@ -215,10 +218,7 @@ int main() {
 
 	// Create a pixel buffer
 	uint32_t *buffer = new uint32_t[pb.width() * pb.height()];
-
-	for (int i = 20; i < 40; ++i)
-		for (int j = 200; j < 220; ++j)
-			buffer[i + j * pb.height()] = (255 | (255 << 8));
+	memset(buffer, 0, pb.width()*pb.height());
 
 	bool running = true;
 	SDL_Event event;
@@ -231,10 +231,9 @@ int main() {
 			}
 		}
 
-		for (int i = 0; i < pb.width(); ++i)
-			for (int j = 0; j < pb.height(); ++j)
-				buffer[i + j * pb.height()] +=
-					buffer[i + 1 + (j + 1) * pb.height()];
+		pb.forward();
+		updateBuffer(buffer, &pb);
+
 		SDL_UpdateTexture(texture, nullptr, buffer,
 						  pb.width() * sizeof(uint32_t));
 		SDL_RenderClear(renderer);
