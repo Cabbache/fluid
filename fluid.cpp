@@ -3,7 +3,9 @@
 #include <SDL2/SDL_timer.h>
 
 #include <cmath>
+#include <limits>
 #include <immintrin.h>
+#include <algorithm>
 #include <iostream>
 
 #include <cassert>
@@ -17,6 +19,22 @@ struct Vector2 {
 	Vector2(float _x = 0, float _y = 0) : x(_x), y(_y) {}
 	Vector2 operator+(const Vector2 &other) const {
 		return Vector2(x + other.x, y + other.y);
+	}
+	Vector2 operator+=(const Vector2 &other) {
+		x += other.x;y += other.y;
+		return *this;
+	}
+	Vector2 operator-=(const Vector2 &other) {
+		x -= other.x;y -= other.y;
+		return *this;
+	}
+	Vector2 operator*=(float c) {
+		x *= c;y *= c;
+		return *this;
+	}
+	Vector2 operator/=(float c) {
+		x /= c;y /= c;
+		return *this;
 	}
 	Vector2 operator-(const Vector2 &other) const {
 		return Vector2(x - other.x, y - other.y);
@@ -54,7 +72,7 @@ void gradient(Vector2 *output, float *input, uint W, uint H) {
 
 void subtract(Vector2 *dst, Vector2 *src, uint W, uint H) {
 	for (uint i = 0; i < W * H; ++i)
-		dst[i] = dst[i] - src[i];
+		dst[i] -= src[i];
 }
 
 class PhyBox {
@@ -70,8 +88,45 @@ class PhyBox {
 		p = new float[W * H];
 	}
 
-	float getmag2(uint x, uint y) {
-		return v[x*H + y].mag2();
+	~PhyBox() {
+		delete[] v;
+		delete[] p;
+	}
+
+	void updateBuffer(uint32_t *buffer) {
+		float max_x,min_x,max_y,min_y;
+		max_x = max_y = -std::numeric_limits<float>::infinity();
+    min_x = min_y = std::numeric_limits<float>::infinity();
+		for (uint i = 0;i < W*H;++i) {
+			max_x = max(max_x, v[i].x);
+			min_x = min(min_x, v[i].x);
+			max_y = max(max_y, v[i].y);
+			min_y = min(min_y, v[i].y);
+		}
+		float sx = 255/(max_x-min_x);
+		float sy = 255/(max_y-min_y);
+
+		//for (uint i = 0;i < W*H;++i) {
+		//	uint8_t r = static_cast<uint8_t>(sx*(v[i].x - min_x));
+		//	uint8_t g = static_cast<uint8_t>(sy*(v[i].y - min_y));
+		//	buffer[i] = (r << 16) | (g << 8) | 0x00;
+		//}
+
+		for (uint y = 0; y < H; ++y)
+		for (uint x = 0; x < W; ++x) {
+			uint8_t r = static_cast<uint8_t>(sx*(v[x*H+y].x - min_x));
+			uint8_t g = static_cast<uint8_t>(sy*(v[x*H+y].y - min_y));
+			//uint8_t b = static_cast<uint8_t>(mag2i % 256);
+			buffer[y*W + x] = (r << 16) | (g << 8) | 0x00;
+
+			//buffer[y * pb->width() + x] = (r << 16) | (g << 8) | b;
+		}
+	}
+
+	void impulse(uint x, uint y) {
+		for (uint i = 0;i < 100;++i)
+		for (uint j = 0;j < 100;++j)
+			v[(x+i)*H + y+j] += Vector2(10,0);
 	}
 
 	void forward(float dt = 1) {
@@ -164,29 +219,20 @@ class PhyBox {
 	}
 };
 
-void updateBuffer(uint32_t *buffer, PhyBox *pb) {
-	for (uint y = 0; y < pb->height(); ++y) {
-		for (uint x = 0; x < pb->width(); ++x) {
-			cout << pb->getmag2(x,y) << endl;
-			uint8_t r = static_cast<uint8_t>((uint)pb->getmag2(x,y) % 256);
-			uint8_t g = static_cast<uint8_t>((uint)pb->getmag2(x,y) % 256);
-			uint8_t b = static_cast<uint8_t>((uint)pb->getmag2(x,y) % 256);
-			buffer[y * pb->width() + x] =
-				(r << 16) | (g << 8) | b; // Pack RGB into a 32-bit integer
-		}
-	}
-}
-
 struct Params {
 	float viscosity;
 	float shc;
 };
 
+void handle_click(SDL_MouseButtonEvent &e, PhyBox &pb) {
+	pb.impulse(e.x,e.y);
+}
+
 int main() {
 	Params params;
 	params.viscosity = 0.005;
 	params.shc = 1;
-	PhyBox pb(200, 150);
+	PhyBox pb(800, 600);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 		printf("error initializing SDL: %s\n", SDL_GetError());
@@ -226,13 +272,18 @@ int main() {
 
 	while (running) {
 		while (SDL_PollEvent(&event)) {
-			if (event.type == SDL_QUIT) {
-				running = false;
+			switch (event.type) {
+				case SDL_QUIT:
+					running = false;
+					break;
+				case SDL_MOUSEBUTTONDOWN:
+					handle_click(event.button, pb);
+					break;
 			}
 		}
 
 		pb.forward();
-		updateBuffer(buffer, &pb);
+		pb.updateBuffer(buffer);
 
 		SDL_UpdateTexture(texture, nullptr, buffer,
 						  pb.width() * sizeof(uint32_t));
