@@ -22,6 +22,9 @@ struct Vector2 {
 	Vector2 operator+(const Vector2 &other) const {
 		return Vector2(x + other.x, y + other.y);
 	}
+	Vector2 operator-(const Vector2 &other) const {
+		return Vector2(x - other.x, y - other.y);
+	}
 	Vector2 operator+=(const Vector2 &other) {
 		x += other.x;y += other.y;
 		return *this;
@@ -38,9 +41,6 @@ struct Vector2 {
 		x /= c;y /= c;
 		return *this;
 	}
-	Vector2 operator-(const Vector2 &other) const {
-		return Vector2(x - other.x, y - other.y);
-	}
 	float mag2() {
 		return x*x + y*y;
 	}
@@ -49,6 +49,9 @@ struct Vector2 {
 		return os;
 	}
 };
+inline Vector2 operator-(const Vector2 &vec) {
+	return Vector2(-vec.x, -vec.y);
+}
 inline Vector2 operator*(float s, const Vector2 &vec) {
 	return Vector2(vec.x * s, vec.y * s);
 }
@@ -82,7 +85,7 @@ class PhyBox {
 	Vector2 *tmpMem; //used for calculations
 	Vector2 *tmpMem2; //used for calculations
 	float *p;	// pressure
-	float viscosity = 1;
+	float viscosity = 0.001;
 
 	uint W, H;
 
@@ -136,7 +139,19 @@ class PhyBox {
 			v[(min(x+i,W-1))*H + min(y+j,H-1)] += Vector2(fx,fy);
 	}
 
+	void setBoundary() {
+		for (uint x=0;x<W;++x){
+			v[x*H + 0] = -v[x*H + 1];
+			v[x*H + H] = -v[x*H + (H-1)];
+		}
+		for (uint y=0;y<H;++y){
+			v[0 + y] = -v[1 + y];
+			v[W + y] = -v[(W-1) + y];
+		}
+	}
+
 	void forward(float dt = 1) {
+		//setBoundary();
 		advect(tmpMem, dt);
 		memcpy(v, tmpMem, W * H * sizeof(Vector2));
 
@@ -152,7 +167,7 @@ class PhyBox {
 
   private:
 	template <typename T>
-	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 20) {
+	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 60) {
 		for (uint t = 0; t < iters; ++t) {
 			for (uint i = 1; i < W - 1; ++i)
 				for (uint j = 1; j < H - 1; ++j) {
@@ -195,8 +210,7 @@ class PhyBox {
 		for (uint x = 0; x < W; ++x)
 			for (uint y = 0; y < H; ++y) {
 				Vector2 vel = v[x * H + y];
-				result[x * H + y] =
-					lerp_index(Vector2(x - vel.x, y - vel.y)) * dt;
+				result[x * H + y] = lerp_index(Vector2(x,y) - vel*dt);
 			}
 	}
 
@@ -295,7 +309,7 @@ int main() {
 			}
 		}
 
-		pb.forward(1);
+		pb.forward(3);
 		pb.updateBuffer(buffer);
 
 		SDL_UpdateTexture(texture, nullptr, buffer, pb.width() * sizeof(uint32_t));
