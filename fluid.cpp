@@ -79,6 +79,7 @@ void subtract(Vector2 *dst, Vector2 *src, uint W, uint H) {
 
 class PhyBox {
 	Vector2 *v; // velocity
+	Vector2 *tmpMem; //used for calculations
 	float *p;	// pressure
 	float viscosity = 1;
 
@@ -87,12 +88,14 @@ class PhyBox {
   public:
 	PhyBox(uint width, uint height) : W(width), H(height) {
 		v = new Vector2[W * H];
+		tmpMem = new Vector2[W * H];
 		p = new float[W * H];
 	}
 
 	~PhyBox() {
 		delete[] v;
 		delete[] p;
+		delete[] tmpMem;
 	}
 
 	void updateBuffer(uint32_t *buffer) {
@@ -132,17 +135,14 @@ class PhyBox {
 	}
 
 	void forward(float dt = 1) {
-		Vector2 *vecfield = new Vector2[W * H];
-		advect(vecfield, dt);
-		memcpy(v, vecfield, W * H * sizeof(Vector2));
+		advect(tmpMem, dt);
+		memcpy(v, tmpMem, W * H * sizeof(Vector2));
 
-		diffuse(dt);
+		diffuse(tmpMem, dt);
 		updatePressure();
 
-		gradient(vecfield, p, W, H);
-		subtract(v, vecfield, W, H);
-
-		delete[] vecfield;
+		gradient(tmpMem, p, W, H);
+		subtract(v, tmpMem, W, H);
 	}
 
 	uint width() { return W; }
@@ -211,12 +211,10 @@ class PhyBox {
 			}
 	}
 
-	void diffuse(float dt = 1) {
+	void diffuse(Vector2 *vecfield, float dt = 1) {
 		float alpha = 1 / (viscosity * dt);
-		Vector2 *b = new Vector2[W * H];
-		memcpy(b, v, W * H * sizeof(Vector2));
-		jacobi(v, b, alpha, 4 + alpha);
-		delete[] b;
+		memcpy(vecfield, v, W * H * sizeof(Vector2));
+		jacobi(v, vecfield, alpha, 4 + alpha);
 	}
 
 	void updatePressure() {
