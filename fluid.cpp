@@ -80,6 +80,7 @@ void subtract(Vector2 *dst, Vector2 *src, uint W, uint H) {
 class PhyBox {
 	Vector2 *v; // velocity
 	Vector2 *tmpMem; //used for calculations
+	Vector2 *tmpMem2; //used for calculations
 	float *p;	// pressure
 	float viscosity = 1;
 
@@ -89,6 +90,7 @@ class PhyBox {
 	PhyBox(uint width, uint height) : W(width), H(height) {
 		v = new Vector2[W * H];
 		tmpMem = new Vector2[W * H];
+		tmpMem2 = new Vector2[W * H];
 		p = new float[W * H];
 	}
 
@@ -139,7 +141,7 @@ class PhyBox {
 		memcpy(v, tmpMem, W * H * sizeof(Vector2));
 
 		diffuse(tmpMem, dt);
-		updatePressure();
+		updatePressure((float*)tmpMem);
 
 		gradient(tmpMem, p, W, H);
 		subtract(v, tmpMem, W, H);
@@ -150,21 +152,18 @@ class PhyBox {
 
   private:
 	template <typename T>
-	void jacobi(T *x, T *b, float alpha, float beta, uint iters = 20) {
-		// TODO pass memory in arg instead of allocating here
-		T *result = new T[W * H];
+	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 20) {
 		for (uint t = 0; t < iters; ++t) {
 			for (uint i = 1; i < W - 1; ++i)
 				for (uint j = 1; j < H - 1; ++j) {
-					result[i * H + j] =
+					mem[i * H + j] =
 						(x[(i - 1) * H + j] + x[(i + 1) * H + j] +
 						 x[i * H + j - 1] + x[i * H + j + 1] +
 						 alpha * b[i * H + j]) /
 						beta;
 				}
-			memcpy(x, result, sizeof(T) * W * H);
+			memcpy(x, mem, sizeof(T) * W * H);
 		}
-		delete[] result;
 	}
 
 	Vector2 lerp_index(const Vector2 &index) {
@@ -214,14 +213,12 @@ class PhyBox {
 	void diffuse(Vector2 *vecfield, float dt = 1) {
 		float alpha = 1 / (viscosity * dt);
 		memcpy(vecfield, v, W * H * sizeof(Vector2));
-		jacobi(v, vecfield, alpha, 4 + alpha);
+		jacobi(v, vecfield, tmpMem2, alpha, 4 + alpha);
 	}
 
-	void updatePressure() {
-		float *dvg = new float[W * H];
-		divergence(dvg);
-		jacobi(p, dvg, -1, 4);
-		delete[] dvg;
+	void updatePressure(float* mem) {
+		divergence(mem);
+		jacobi(p, mem, (float*)tmpMem2, -1, 4);
 	}
 };
 
