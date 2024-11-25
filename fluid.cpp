@@ -132,18 +132,17 @@ class PhyBox {
 	}
 
 	void forward(float dt = 1) {
-		Vector2 *adv_res = new Vector2[W * H];
-		advect(adv_res, dt);
-		memcpy(v, adv_res, W * H * sizeof(Vector2));
-		delete[] adv_res;
+		Vector2 *vecfield = new Vector2[W * H];
+		advect(vecfield, dt);
+		memcpy(v, vecfield, W * H * sizeof(Vector2));
 
 		diffuse(dt);
 		updatePressure();
 
-		Vector2 *pressure_gradient = new Vector2[W * H];
-		gradient(pressure_gradient, p, W, H);
-		subtract(v, pressure_gradient, W, H);
-		delete[] pressure_gradient;
+		gradient(vecfield, p, W, H);
+		subtract(v, vecfield, W, H);
+
+		delete[] vecfield;
 	}
 
 	uint width() { return W; }
@@ -250,7 +249,7 @@ int main() {
 	Params params;
 	params.viscosity = 0.005;
 	params.shc = 1;
-	PhyBox pb(400, 400);
+	PhyBox pb(600, 600);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 		printf("error initializing SDL: %s\n", SDL_GetError());
