@@ -6,7 +6,7 @@ My CPU implementation of fluid based on what is described in [GPU Gems](https://
 
 Normal                     |Multiply velocity by scalar after advection           
 :-------------------------:|:-------------------------:
-![](https://cabbache.github.io/fluid.gif)  |  ![](https://cabbache.github.io/fluid2.gif)
+![](https://cabbache.github.io/fluid3.gif)  |  ![](https://cabbache.github.io/fluid4.gif)
 
 
 ## Note
