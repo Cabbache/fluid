@@ -4,7 +4,11 @@
 
 #include <cmath>
 #include <limits>
+#ifdef __AVX__
 #include <immintrin.h>
+#else
+#warning avx is not enabled
+#endif
 #include <algorithm>
 #include <iostream>
 
@@ -13,6 +17,7 @@
 #include <chrono>
 
 #define LERP
+#define SCALE
 
 using namespace std;
 
@@ -28,32 +33,32 @@ struct alignas(8) Vector2 {
 		return Vector2(x - other.x, y - other.y);
 	}
 	Vector2 operator+=(const Vector2 &other) {
-		x += other.x;y += other.y;
+		x += other.x;
+		y += other.y;
 		return *this;
 	}
 	Vector2 operator-=(const Vector2 &other) {
-		x -= other.x;y -= other.y;
+		x -= other.x;
+		y -= other.y;
 		return *this;
 	}
 	Vector2 operator*=(float c) {
-		x *= c;y *= c;
+		x *= c;
+		y *= c;
 		return *this;
 	}
 	Vector2 operator/=(float c) {
-		x /= c;y /= c;
+		x /= c;
+		y /= c;
 		return *this;
 	}
-	float mag2() {
-		return x*x + y*y;
-	}
+	float mag2() { return x * x + y * y; }
 	friend ostream &operator<<(ostream &os, const Vector2 &vec) {
 		os << "(" << vec.x << ", " << vec.y << ")";
 		return os;
 	}
 };
-inline Vector2 operator-(const Vector2 &vec) {
-	return Vector2(-vec.x, -vec.y);
-}
+inline Vector2 operator-(const Vector2 &vec) { return Vector2(-vec.x, -vec.y); }
 inline Vector2 operator*(float s, const Vector2 &vec) {
 	return Vector2(vec.x * s, vec.y * s);
 }
@@ -74,37 +79,41 @@ void gradient(Vector2 *output, float *input, uint W, uint H) {
 				Vector2(input[(x + 1) * H + y] - input[(x - 1) * H + y],
 						input[x * H + y + 1] - input[x * H + y - 1]) /
 				2;
+			// output[x*H + y] = Vector2(input[(x+1)*H + y] - input[x*H + y],
+			// input[x*H + y+1] - input[x*H + y]);
 		}
 }
 
 void subtract(Vector2 *dst_vec, Vector2 *src_vec, uint W, uint H) {
-//	for (uint i = 0; i < W * H; ++i)
-//		dst_vec[i] -= src_vec[i];
-
-	float *src = reinterpret_cast<float*>(src_vec);
-	float *dst = reinterpret_cast<float*>(dst_vec);
-	uint iters = 2*W*H/8; //*2 because vec has two floats
-	for (uint i = 0;i < iters;++i) {
-		uint s = i*8;
+#ifdef __AVX__
+	float *src = reinterpret_cast<float *>(src_vec);
+	float *dst = reinterpret_cast<float *>(dst_vec);
+	uint iters = 2 * W * H / 8; //*2 because vec has two floats
+	for (uint i = 0; i < iters; ++i) {
+		uint s = i * 8;
 		__m256 a = _mm256_load_ps(dst + s);
 		__m256 b = _mm256_load_ps(src + s);
 		a = _mm256_sub_ps(a, b);
-    _mm256_store_ps(dst+s, a);
+		_mm256_store_ps(dst + s, a);
 	}
+#else
+	for (uint i = 0; i < W * H; ++i)
+		dst_vec[i] -= src_vec[i];
+#endif
 }
 
 class PhyBox {
-	Vector2 *v; // velocity
-	Vector2 *tmpMem; //used for calculations
-	Vector2 *tmpMem2; //used for calculations
-	float *p;	// pressure
+	Vector2 *v;		  // velocity
+	Vector2 *tmpMem;  // used for calculations
+	Vector2 *tmpMem2; // used for calculations
+	float *p;		  // pressure
 	float viscosity = 0.01;
 
 	uint W, H;
 
   public:
 	PhyBox(uint width, uint height) : W(width), H(height) {
-		assert((W*H) % 8 == 0);
+		assert((W * H) % 8 == 0);
 		v = new (std::align_val_t(32)) Vector2[W * H];
 		tmpMem = new (std::align_val_t(32)) Vector2[W * H];
 		tmpMem2 = new Vector2[W * H];
@@ -118,59 +127,55 @@ class PhyBox {
 	}
 
 	void updateBuffer(uint32_t *buffer) {
-		float max_x,min_x,max_y,min_y;
+		float max_x, min_x, max_y, min_y;
+
+#ifdef SCALE
 		max_x = max_y = -std::numeric_limits<float>::infinity();
-    min_x = min_y = std::numeric_limits<float>::infinity();
-		for (uint i = 0;i < W*H;++i) {
+		min_x = min_y = std::numeric_limits<float>::infinity();
+		for (uint i = 0; i < W * H; ++i) {
 			max_x = max(max_x, v[i].x);
 			min_x = min(min_x, v[i].x);
 			max_y = max(max_y, v[i].y);
 			min_y = min(min_y, v[i].y);
 		}
-		float sx = 255/(max_x-min_x);
-		float sy = 255/(max_y-min_y);
+#else
+		max_x = max_y = 60;
+		min_x = min_y = -20;
+#endif
 
-		//for (uint i = 0;i < W*H;++i) {
-		//	uint8_t r = static_cast<uint8_t>(sx*(v[i].x - min_x));
-		//	uint8_t g = static_cast<uint8_t>(sy*(v[i].y - min_y));
-		//	buffer[i] = (r << 16) | (g << 8) | 0x00;
-		//}
+		float sx = 255 / (max_x - min_x);
+		float sy = 255 / (max_y - min_y);
 
+		for (uint i = 0; i < W * H; ++i) {
+			uint8_t r = static_cast<uint8_t>(sx * (v[i].x - min_x));
+			uint8_t g = static_cast<uint8_t>(sy * (v[i].y - min_y));
+			buffer[i] = (r << 16) | (g << 8) | 0x00;
+		}
+
+		/*
 		for (uint y = 0; y < H; ++y)
 		for (uint x = 0; x < W; ++x) {
 			uint8_t r = static_cast<uint8_t>(sx*(v[x*H+y].x - min_x));
 			uint8_t g = static_cast<uint8_t>(sy*(v[x*H+y].y - min_y));
 			//uint8_t b = static_cast<uint8_t>(mag2i % 256);
 			buffer[y*W + x] = (r << 16) | (g << 8) | 0x00;
-
-			//buffer[y * pb->width() + x] = (r << 16) | (g << 8) | b;
 		}
+		*/
 	}
 
 	void impulse(uint x, uint y, uint fx, uint fy) {
-		for (uint i = 0;i < 100;++i)
-		for (uint j = 0;j < 100;++j)
-			v[(min(x+i,W-1))*H + min(y+j,H-1)] += Vector2(fx,fy);
-	}
-
-	void setBoundary() {
-		for (uint x=0;x<W;++x){
-			v[x*H + 0] = -v[x*H + 1];
-			v[x*H + H] = -v[x*H + (H-1)];
-		}
-		for (uint y=0;y<H;++y){
-			v[0 + y] = -v[1 + y];
-			v[W + y] = -v[(W-1) + y];
-		}
+		for (uint i = 0; i < 100; ++i)
+			for (uint j = 0; j < 100; ++j)
+				v[(min(x + i, W - 1)) * H + min(y + j, H - 1)] +=
+					Vector2(fx, fy);
 	}
 
 	void forward(float dt = 1) {
-		//setBoundary();
 		advect(tmpMem, dt);
 		memcpy(v, tmpMem, W * H * sizeof(Vector2));
 
 		diffuse(tmpMem, dt);
-		updatePressure((float*)tmpMem);
+		updatePressure((float *)tmpMem);
 
 		gradient(tmpMem, p, W, H);
 		subtract(v, tmpMem, W, H);
@@ -181,15 +186,14 @@ class PhyBox {
 
   private:
 	template <typename T>
-	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 60) {
+	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 50) {
 		for (uint t = 0; t < iters; ++t) {
 			for (uint i = 1; i < W - 1; ++i)
 				for (uint j = 1; j < H - 1; ++j) {
-					mem[i * H + j] =
-						(x[(i - 1) * H + j] + x[(i + 1) * H + j] +
-						 x[i * H + j - 1] + x[i * H + j + 1] +
-						 alpha * b[i * H + j]) /
-						beta;
+					mem[i * H + j] = (x[(i - 1) * H + j] + x[(i + 1) * H + j] +
+									  x[i * H + j - 1] + x[i * H + j + 1] +
+									  alpha * b[i * H + j]) /
+									 beta;
 				}
 			memcpy(x, mem, sizeof(T) * W * H);
 		}
@@ -198,36 +202,36 @@ class PhyBox {
 	Vector2 lerp_index(const Vector2 &index) {
 		int xl = (int)floor(index.x);
 		int yl = (int)floor(index.y);
-		#ifdef LERP
-			int xh = (int)ceil(index.x);
-			int yh = (int)ceil(index.y);
+#ifdef LERP
+		int xh = (int)ceil(index.x);
+		int yh = (int)ceil(index.y);
 
-			//TODO
-			xl = min(max(xl,0),(int)W-1);
-			xh = min(max(xh,0),(int)W-1);
-			yl = min(max(yl,0),(int)H-1);
-			yh = min(max(yh,0),(int)H-1);
+		// TODO
+		xl = min(max(xl, 0), (int)W - 1);
+		xh = min(max(xh, 0), (int)W - 1);
+		yl = min(max(yl, 0), (int)H - 1);
+		yh = min(max(yh, 0), (int)H - 1);
 
-			assert(xl >= 0 && xl < W);
-			assert(xh >= 0 && xh < W);
-			assert(yl >= 0 && yl < H);
-			assert(yh >= 0 && yh < H);
+		assert(xl >= 0 && xl < W);
+		assert(xh >= 0 && xh < W);
+		assert(yl >= 0 && yl < H);
+		assert(yh >= 0 && yh < H);
 
-			float dx = index.x - xl;
-			float dy = index.y - yl;
-			Vector2 myl = dx * v[xh * H + yl] + (1 - dx) * v[xl * H + yl];
-			Vector2 myh = dx * v[xh * H + yh] + (1 - dx) * v[xl * H + yh];
-			return dy * myh + (1 - dy) * myl;
-		#else
-			return v[xl*H + yl];
-		#endif
+		float dx = index.x - xl;
+		float dy = index.y - yl;
+		Vector2 myl = dx * v[xh * H + yl] + (1 - dx) * v[xl * H + yl];
+		Vector2 myh = dx * v[xh * H + yh] + (1 - dx) * v[xl * H + yh];
+		return dy * myh + (1 - dy) * myl;
+#else
+		return v[xl * H + yl];
+#endif
 	}
 
 	void advect(Vector2 *result, float dt = 1) {
-		for (uint x = 3; x < W-3; ++x)
-			for (uint y = 3; y < H-3; ++y) {
+		for (uint x = 3; x < W - 3; ++x)
+			for (uint y = 3; y < H - 3; ++y) {
 				Vector2 vel = v[x * H + y];
-				result[x * H + y] = lerp_index(Vector2(x,y) - vel*dt);
+				result[x * H + y] = lerp_index(Vector2(x, y) - vel * dt);
 			}
 	}
 
@@ -247,9 +251,9 @@ class PhyBox {
 		jacobi(v, vecfield, tmpMem2, alpha, 4 + alpha);
 	}
 
-	void updatePressure(float* mem) {
+	void updatePressure(float *mem) {
 		divergence(mem);
-		jacobi(p, mem, (float*)tmpMem2, -1, 4);
+		jacobi(p, mem, (float *)tmpMem2, -1, 4);
 	}
 };
 
@@ -260,11 +264,11 @@ struct Params {
 
 void handle_click(SDL_MouseButtonEvent &e, PhyBox &pb) {
 	switch (e.button) {
-		case 1: //left click
-			pb.impulse(e.x,e.y,30,0);
+		case 1: // left click
+			pb.impulse(e.x, e.y, 30, 0);
 			break;
-		case 3: //right click
-			pb.impulse(e.x,e.y,0,30);
+		case 3: // right click
+			pb.impulse(e.x, e.y, 0, 30);
 			break;
 	}
 }
@@ -273,13 +277,13 @@ int main() {
 	Params params;
 	params.viscosity = 0.005;
 	params.shc = 1;
-	PhyBox pb(500, 500);
+	PhyBox pb(400, 400);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 		printf("error initializing SDL: %s\n", SDL_GetError());
 	SDL_Window *window =
-		SDL_CreateWindow("FLUID", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-						 pb.width(), pb.height(), 0);
+		SDL_CreateWindow("FLUID", SDL_WINDOWPOS_CENTERED,
+						 SDL_WINDOWPOS_CENTERED, pb.width(), pb.height(), 0);
 
 	SDL_Renderer *renderer =
 		SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -305,13 +309,14 @@ int main() {
 
 	// Create a pixel buffer
 	uint32_t *buffer = new uint32_t[pb.width() * pb.height()];
-	memset(buffer, 0, pb.width()*pb.height());
+	memset(buffer, 0, pb.width() * pb.height());
 
 	bool running = true;
 	SDL_Event event;
 	uint thresh = 100;
 
-	std::chrono::steady_clock::time_point tick = std::chrono::steady_clock::now();
+	std::chrono::steady_clock::time_point tick =
+		std::chrono::steady_clock::now();
 	uint ctr = 0;
 	while (running) {
 		while (SDL_PollEvent(&event)) {
@@ -328,15 +333,19 @@ int main() {
 		pb.forward(0.3);
 		pb.updateBuffer(buffer);
 
-		SDL_UpdateTexture(texture, nullptr, buffer, pb.width() * sizeof(uint32_t));
+		SDL_UpdateTexture(texture, nullptr, buffer,
+						  pb.width() * sizeof(uint32_t));
 		SDL_RenderClear(renderer);
 		SDL_RenderCopy(renderer, texture, nullptr, nullptr);
 		SDL_RenderPresent(renderer);
 
 		if (++ctr % thresh == 0) {
-			std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-			uint us = std::chrono::duration_cast<std::chrono::microseconds>(now - tick).count();
-			cout << "fps: " << thresh*1000000.0/us << endl;
+			std::chrono::steady_clock::time_point now =
+				std::chrono::steady_clock::now();
+			uint us = std::chrono::duration_cast<std::chrono::microseconds>(
+						  now - tick)
+						  .count();
+			cout << "fps: " << thresh * 1000000.0 / us << endl;
 			tick = std::chrono::steady_clock::now();
 		}
 	}
