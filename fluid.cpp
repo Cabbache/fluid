@@ -12,6 +12,8 @@
 
 #include <chrono>
 
+#define LERP
+
 using namespace std;
 
 typedef unsigned int uint;
@@ -179,7 +181,7 @@ class PhyBox {
 
   private:
 	template <typename T>
-	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 30) {
+	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 60) {
 		for (uint t = 0; t < iters; ++t) {
 			for (uint i = 1; i < W - 1; ++i)
 				for (uint j = 1; j < H - 1; ++j) {
@@ -195,32 +197,35 @@ class PhyBox {
 
 	Vector2 lerp_index(const Vector2 &index) {
 		int xl = (int)floor(index.x);
-		int xh = (int)ceil(index.x);
 		int yl = (int)floor(index.y);
-		int yh = (int)ceil(index.y);
+		#ifdef LERP
+			int xh = (int)ceil(index.x);
+			int yh = (int)ceil(index.y);
 
-		//TODO
-		xl = min(max(xl,0),(int)W-1);
-		xh = min(max(xh,0),(int)W-1);
-		yl = min(max(yl,0),(int)H-1);
-		yh = min(max(yh,0),(int)H-1);
+			//TODO
+			xl = min(max(xl,0),(int)W-1);
+			xh = min(max(xh,0),(int)W-1);
+			yl = min(max(yl,0),(int)H-1);
+			yh = min(max(yh,0),(int)H-1);
 
-		assert(xl >= 0 && xl < W);
-		assert(xh >= 0 && xh < W);
-		assert(yl >= 0 && yl < H);
-		assert(yh >= 0 && yh < H);
+			assert(xl >= 0 && xl < W);
+			assert(xh >= 0 && xh < W);
+			assert(yl >= 0 && yl < H);
+			assert(yh >= 0 && yh < H);
 
-		float dx = index.x - xl;
-		float dy = index.y - yl;
-
-		Vector2 myl = dx * v[xh * H + yl] + (1 - dx) * v[xl * H + yl];
-		Vector2 myh = dx * v[xh * H + yh] + (1 - dx) * v[xl * H + yh];
-		return dy * myh + (1 - dy) * myl;
+			float dx = index.x - xl;
+			float dy = index.y - yl;
+			Vector2 myl = dx * v[xh * H + yl] + (1 - dx) * v[xl * H + yl];
+			Vector2 myh = dx * v[xh * H + yh] + (1 - dx) * v[xl * H + yh];
+			return dy * myh + (1 - dy) * myl;
+		#else
+			return v[xl*H + yl];
+		#endif
 	}
 
 	void advect(Vector2 *result, float dt = 1) {
-		for (uint x = 0; x < W; ++x)
-			for (uint y = 0; y < H; ++y) {
+		for (uint x = 3; x < W-3; ++x)
+			for (uint y = 3; y < H-3; ++y) {
 				Vector2 vel = v[x * H + y];
 				result[x * H + y] = lerp_index(Vector2(x,y) - vel*dt);
 			}
@@ -268,7 +273,7 @@ int main() {
 	Params params;
 	params.viscosity = 0.005;
 	params.shc = 1;
-	PhyBox pb(800, 800);
+	PhyBox pb(500, 500);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 		printf("error initializing SDL: %s\n", SDL_GetError());

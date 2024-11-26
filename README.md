@@ -4,9 +4,7 @@ My CPU implementation of fluid based on what is described in [GPU Gems](https://
 
 ## Renderings
 
-The behavior of the fluid can appear interesting when the implementation is possibly broken.
-
-dt=1                       |  dt>1           
+Normal                     |Multiply velocity by scalar after advection           
 :-------------------------:|:-------------------------:
 ![](https://cabbache.github.io/fluid.gif)  |  ![](https://cabbache.github.io/fluid2.gif)
 
