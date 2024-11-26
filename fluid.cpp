@@ -16,7 +16,7 @@ using namespace std;
 
 typedef unsigned int uint;
 
-struct Vector2 {
+struct alignas(8) Vector2 {
 	float x, y;
 	Vector2(float _x = 0, float _y = 0) : x(_x), y(_y) {}
 	Vector2 operator+(const Vector2 &other) const {
@@ -75,9 +75,20 @@ void gradient(Vector2 *output, float *input, uint W, uint H) {
 		}
 }
 
-void subtract(Vector2 *dst, Vector2 *src, uint W, uint H) {
-	for (uint i = 0; i < W * H; ++i)
-		dst[i] -= src[i];
+void subtract(Vector2 *dst_vec, Vector2 *src_vec, uint W, uint H) {
+//	for (uint i = 0; i < W * H; ++i)
+//		dst_vec[i] -= src_vec[i];
+
+	float *src = reinterpret_cast<float*>(src_vec);
+	float *dst = reinterpret_cast<float*>(dst_vec);
+	uint iters = 2*W*H/8; //*2 because vec has two floats
+	for (uint i = 0;i < iters;++i) {
+		uint s = i*8;
+		__m256 a = _mm256_load_ps(dst + s);
+		__m256 b = _mm256_load_ps(src + s);
+		a = _mm256_sub_ps(a, b);
+    _mm256_store_ps(dst+s, a);
+	}
 }
 
 class PhyBox {
@@ -85,14 +96,15 @@ class PhyBox {
 	Vector2 *tmpMem; //used for calculations
 	Vector2 *tmpMem2; //used for calculations
 	float *p;	// pressure
-	float viscosity = 0.001;
+	float viscosity = 0.01;
 
 	uint W, H;
 
   public:
 	PhyBox(uint width, uint height) : W(width), H(height) {
-		v = new Vector2[W * H];
-		tmpMem = new Vector2[W * H];
+		assert((W*H) % 8 == 0);
+		v = new (std::align_val_t(32)) Vector2[W * H];
+		tmpMem = new (std::align_val_t(32)) Vector2[W * H];
 		tmpMem2 = new Vector2[W * H];
 		p = new float[W * H];
 	}
@@ -167,7 +179,7 @@ class PhyBox {
 
   private:
 	template <typename T>
-	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 60) {
+	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 30) {
 		for (uint t = 0; t < iters; ++t) {
 			for (uint i = 1; i < W - 1; ++i)
 				for (uint j = 1; j < H - 1; ++j) {
@@ -245,11 +257,9 @@ void handle_click(SDL_MouseButtonEvent &e, PhyBox &pb) {
 	switch (e.button) {
 		case 1: //left click
 			pb.impulse(e.x,e.y,30,0);
-			cout << "applied X impulse" << endl;
 			break;
 		case 3: //right click
 			pb.impulse(e.x,e.y,0,30);
-			cout << "applied Y impulse" << endl;
 			break;
 	}
 }
@@ -258,7 +268,7 @@ int main() {
 	Params params;
 	params.viscosity = 0.005;
 	params.shc = 1;
-	PhyBox pb(600, 600);
+	PhyBox pb(800, 800);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 		printf("error initializing SDL: %s\n", SDL_GetError());
@@ -294,6 +304,7 @@ int main() {
 
 	bool running = true;
 	SDL_Event event;
+	uint thresh = 100;
 
 	std::chrono::steady_clock::time_point tick = std::chrono::steady_clock::now();
 	uint ctr = 0;
@@ -309,7 +320,7 @@ int main() {
 			}
 		}
 
-		pb.forward(3);
+		pb.forward(0.3);
 		pb.updateBuffer(buffer);
 
 		SDL_UpdateTexture(texture, nullptr, buffer, pb.width() * sizeof(uint32_t));
@@ -317,10 +328,10 @@ int main() {
 		SDL_RenderCopy(renderer, texture, nullptr, nullptr);
 		SDL_RenderPresent(renderer);
 
-		if (++ctr % 100 == 0) {
+		if (++ctr % thresh == 0) {
 			std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 			uint us = std::chrono::duration_cast<std::chrono::microseconds>(now - tick).count();
-			cout << "fps: " << 100000000.0/us << endl;
+			cout << "fps: " << thresh*1000000.0/us << endl;
 			tick = std::chrono::steady_clock::now();
 		}
 	}
