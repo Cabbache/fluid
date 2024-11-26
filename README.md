@@ -8,10 +8,13 @@ Normal                     |Multiply velocity by scalar after advection
 :-------------------------:|:-------------------------:
 ![](https://cabbache.github.io/fluid3.gif)  |  ![](https://cabbache.github.io/fluid4.gif)
 
+## How to run on linux
 
-## Note
-- Still need to implement boundary conditions
-- It requires libsdl2
+* Make sure libsdl2 is installed. For debian based OS: `sudo apt update && sudo apt install libsdl2-dev -y`
+* `./compile.sh && ./fluid.exe`
+
+## Notes
+* Still need to implement boundary conditions
 
 ## Reference
 
