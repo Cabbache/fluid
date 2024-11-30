@@ -10,8 +10,9 @@ Normal                     |Multiply velocity by scalar after advection
 
 ## How to run on linux
 
-* Make sure libsdl2 is installed. For debian based OS: `sudo apt update && sudo apt install libsdl2-dev -y`
-* `./compile.sh && ./fluid.exe`
+* Make sure libsdl2 installed. For debian based OS: `sudo apt update && sudo apt install libsdl2-dev -y`
+* Make sure g++, cmake and make are installed
+* `mkdir build && cd build && cmake .. && make && ./fluid`
 
 ## Notes
 * Still need to implement boundary conditions

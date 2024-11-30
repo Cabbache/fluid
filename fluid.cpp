@@ -16,9 +16,6 @@
 
 #include <chrono>
 
-#define LERP
-#define SCALE
-
 using namespace std;
 
 typedef unsigned int uint;
@@ -174,7 +171,9 @@ class PhyBox {
 		advect(tmpMem, dt);
 		memcpy(v, tmpMem, W * H * sizeof(Vector2));
 
+#ifdef DIFFUSE
 		diffuse(tmpMem, dt);
+#endif
 		updatePressure((float *)tmpMem);
 
 		gradient(tmpMem, p, W, H);
