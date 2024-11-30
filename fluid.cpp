@@ -212,10 +212,10 @@ class PhyBox {
 		yl = min(max(yl, 0), (int)H - 1);
 		yh = min(max(yh, 0), (int)H - 1);
 
-		assert(xl >= 0 && xl < W);
-		assert(xh >= 0 && xh < W);
-		assert(yl >= 0 && yl < H);
-		assert(yh >= 0 && yh < H);
+		//assert(xl >= 0 && xl < W);
+		//assert(xh >= 0 && xh < W);
+		//assert(yl >= 0 && yl < H);
+		//assert(yh >= 0 && yh < H);
 
 		float dx = index.x - xl;
 		float dy = index.y - yl;
@@ -265,10 +265,10 @@ struct Params {
 void handle_click(SDL_MouseButtonEvent &e, PhyBox &pb) {
 	switch (e.button) {
 		case 1: // left click
-			pb.impulse(e.x, e.y, 30, 0);
+			pb.impulse(e.y, e.x, 30, 0);
 			break;
 		case 3: // right click
-			pb.impulse(e.x, e.y, 0, 30);
+			pb.impulse(e.y, e.x, 0, 30);
 			break;
 	}
 }
@@ -277,7 +277,7 @@ int main() {
 	Params params;
 	params.viscosity = 0.005;
 	params.shc = 1;
-	PhyBox pb(400, 400);
+	PhyBox pb(600, 600);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 		printf("error initializing SDL: %s\n", SDL_GetError());
