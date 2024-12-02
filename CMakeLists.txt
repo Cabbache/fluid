@@ -9,9 +9,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Add options to enable/disable LERP and SCALE
-option(ENABLE_LERP "interpolate between cell indexes" ON)
-option(ENABLE_DIFFUSE "Viscuous diffusion" ON)
-option(ENABLE_SCALE "scale the velocity from 0 to 255 when displaying" ON)
+option(LERP "interpolate between cell indexes" ON)
+option(DIFFUSE "Viscuous diffusion" ON)
+option(SCALE "scale the velocity from 0 to 255 when displaying" ON)
 
 # Source file
 set(SOURCE_FILE fluid.cpp)
@@ -32,15 +32,15 @@ include_directories(/usr/include/SDL2)
 set(LIBS SDL2 SDL2_image m)
 
 # Preprocessor definitions for LERP and SCALE
-if(ENABLE_LERP)
+if(LERP)
     add_compile_definitions(LERP)
 endif()
 
-if(ENABLE_SCALE)
+if(SCALE)
     add_compile_definitions(SCALE)
 endif()
 
-if(ENABLE_DIFFUSE)
+if(DIFFUSE)
 		add_compile_definitions(DIFFUSE)
 endif()
 
