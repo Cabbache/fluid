@@ -167,7 +167,15 @@ class PhyBox {
 					Vector2(fx, fy);
 	}
 
+	void setBlocks(uint xs, uint ys, uint xe, uint ye) {
+		for (uint i = xs; i < xe; ++i)
+		for (uint j = ys; j < ye; ++j)
+			v[i*H + j] = Vector2(0,0);
+	}
+
 	void forward(float dt = 1) {
+		setBlocks(200, 200, 400, 250);
+
 		advect(tmpMem, dt);
 		memcpy(v, tmpMem, W * H * sizeof(Vector2));
 
