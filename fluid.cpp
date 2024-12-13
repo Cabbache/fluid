@@ -103,7 +103,7 @@ class PhyBox {
 	Vector2 *v;		  // velocity
 	Vector2 *tmpMem;  // used for calculations
 	Vector2 *tmpMem2; // used for calculations
-	alignas(32) float *p;		  // pressure
+	float *p;		  // pressure
 	float viscosity = 0.01;
 
 	uint W, H;
@@ -194,17 +194,21 @@ class PhyBox {
   private:
 #ifdef __AVX__
 	void jacobi(float *x, float *b, float *mem, float alpha, float invbeta, uint iters = 50) {
-		__m256 mbeta = _mm256_set_ps(invbeta,invbeta,invbeta,invbeta,invbeta,invbeta,invbeta,invbeta);
+		__m256 mbeta = _mm256_set1_ps(invbeta);
 		for (uint t = 0; t < iters; ++t) {
 			for (uint i = 1; i < W - 1; ++i) {
-				for (uint j = 1; j < H - 1; ++j) {
-					mem[i * H + j] = (x[(i - 1) * H + j] + x[(i + 1) * H + j] + x[i * H + j - 1] + x[i * H + j + 1] + alpha * b[i * H + j]);
+				for (uint j = 1; j < H - 1; j+=8) {
+					__m256 left  = _mm256_loadu_ps(&x[i * H + j - 1]);
+					__m256 right = _mm256_loadu_ps(&x[i * H + j + 1]);
+					__m256 up    = _mm256_loadu_ps(&x[(i - 1) * H + j]);
+					__m256 down  = _mm256_loadu_ps(&x[(i + 1) * H + j]);
+					__m256 center = _mm256_loadu_ps(&b[i * H + j]);
+					__m256 sum = _mm256_add_ps(_mm256_add_ps(left, right), _mm256_add_ps(up, down));
+					__m256 alpha_b = _mm256_mul_ps(_mm256_set1_ps(alpha), center);
+					__m256 result = _mm256_add_ps(sum, alpha_b);
+					result = _mm256_mul_ps(result, mbeta);
+					_mm256_storeu_ps(&mem[i * H + j], result);
 				}
-			}
-			for (uint i = 0;i < W*H/8;++i) {
-				__m256 r = _mm256_loadu_ps(mem + i*8);
-				r = _mm256_mul_ps(r,mbeta);
-				_mm256_storeu_ps(mem + i*8, r);
 			}
 			std::swap(x,mem);
 		}
