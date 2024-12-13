@@ -103,7 +103,7 @@ class PhyBox {
 	Vector2 *v;		  // velocity
 	Vector2 *tmpMem;  // used for calculations
 	Vector2 *tmpMem2; // used for calculations
-	float *p;		  // pressure
+	alignas(32) float *p;		  // pressure
 	float viscosity = 0.01;
 
 	uint W, H;
@@ -174,7 +174,7 @@ class PhyBox {
 	}
 
 	void forward(float dt = 1) {
-		setBlocks(200, 200, 400, 250);
+		//setBlocks(200, 200, 400, 250);
 
 		advect(tmpMem, dt);
 		memcpy(v, tmpMem, W * H * sizeof(Vector2));
@@ -182,7 +182,7 @@ class PhyBox {
 #ifdef DIFFUSE
 		diffuse(tmpMem, dt);
 #endif
-		updatePressure((float *)tmpMem);
+		updatePressure(reinterpret_cast<float *>(tmpMem));
 
 		gradient(tmpMem, p, W, H);
 		subtract(v, tmpMem, W, H);
@@ -192,19 +192,47 @@ class PhyBox {
 	uint height() { return H; }
 
   private:
-	template <typename T>
-	void jacobi(T *x, T *b, T *mem, float alpha, float beta, uint iters = 50) {
+#ifdef __AVX__
+	void jacobi(float *x, float *b, float *mem, float alpha, float invbeta, uint iters = 50) {
+		__m256 mbeta = _mm256_set_ps(invbeta,invbeta,invbeta,invbeta,invbeta,invbeta,invbeta,invbeta);
 		for (uint t = 0; t < iters; ++t) {
-			for (uint i = 1; i < W - 1; ++i)
+			for (uint i = 1; i < W - 1; ++i) {
 				for (uint j = 1; j < H - 1; ++j) {
-					mem[i * H + j] = (x[(i - 1) * H + j] + x[(i + 1) * H + j] +
-									  x[i * H + j - 1] + x[i * H + j + 1] +
-									  alpha * b[i * H + j]) /
-									 beta;
+					mem[i * H + j] = (x[(i - 1) * H + j] + x[(i + 1) * H + j] + x[i * H + j - 1] + x[i * H + j + 1] + alpha * b[i * H + j]);
 				}
-			memcpy(x, mem, sizeof(T) * W * H);
+			}
+			for (uint i = 0;i < W*H/8;++i) {
+				__m256 r = _mm256_loadu_ps(mem + i*8);
+				r = _mm256_mul_ps(r,mbeta);
+				_mm256_storeu_ps(mem + i*8, r);
+			}
+			std::swap(x,mem);
 		}
 	}
+
+	void jacobi(Vector2 *x, Vector2 *b, Vector2 *mem, float alpha, float invbeta, uint iters = 50) {
+		for (uint t = 0; t < iters; ++t) {
+			for (uint i = 1; i < W - 1; ++i) {
+				for (uint j = 1; j < H - 1; ++j) {
+					mem[i * H + j] = (x[(i - 1) * H + j] + x[(i + 1) * H + j] + x[i * H + j - 1] + x[i * H + j + 1] + alpha * b[i * H + j]) * invbeta;
+				}
+			}
+			std::swap(x,mem);
+		}
+	}
+#else
+	template <typename T>
+	void jacobi(T *x, T *b, T *mem, float alpha, float invbeta, uint iters = 50) {
+		for (uint t = 0; t < iters; ++t) {
+			for (uint i = 1; i < W - 1; ++i) {
+				for (uint j = 1; j < H - 1; ++j) {
+					mem[i * H + j] = (x[(i - 1) * H + j] + x[(i + 1) * H + j] + x[i * H + j - 1] + x[i * H + j + 1] + alpha * b[i * H + j]) * invbeta;
+				}
+			}
+			std::swap(x,mem);
+		}
+	}
+#endif
 
 	Vector2 lerp_index(const Vector2 &index) {
 		int xl = (int)floor(index.x);
@@ -255,12 +283,12 @@ class PhyBox {
 	void diffuse(Vector2 *vecfield, float dt = 1) {
 		float alpha = 1 / (viscosity * dt);
 		memcpy(vecfield, v, W * H * sizeof(Vector2));
-		jacobi(v, vecfield, tmpMem2, alpha, 4 + alpha);
+		jacobi(v, vecfield, tmpMem2, alpha, 1.0 / (4.0 + alpha));
 	}
 
 	void updatePressure(float *mem) {
 		divergence(mem);
-		jacobi(p, mem, (float *)tmpMem2, -1, 4);
+		jacobi(p, mem, reinterpret_cast<float *>(tmpMem2), -1, 0.25);
 	}
 };
 
