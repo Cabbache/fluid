@@ -306,12 +306,12 @@ class PhyBox {
 
 	void diffuse(Vector2 *vecfield, float dt = 1) {
 		float alpha = 1 / (viscosity * dt);
-		jacobi(v, vecfield, tmpMem2, alpha, 1.0 / (4.0 + alpha), 50);
+		jacobi(v, vecfield, tmpMem2, alpha, 1.0 / (4.0 + alpha), 30);
 	}
 
 	void updatePressure(float *mem) {
 		divergence(mem);
-		jacobi(p, mem, reinterpret_cast<float *>(tmpMem2), -1, 0.25, 50);
+		jacobi(p, mem, reinterpret_cast<float *>(tmpMem2), -1, 0.25, 30);
 	}
 };
 
