@@ -71,14 +71,28 @@ inline Vector2 operator/(const Vector2 &vec, float s) {
 
 void gradient(Vector2 *output, float *input, uint W, uint H) {
 	for (uint x = 1; x < W - 1; ++x)
-		for (uint y = 1; y < H - 1; ++y) {
-			output[x * H + y] =
-				Vector2(input[(x + 1) * H + y] - input[(x - 1) * H + y],
-						input[x * H + y + 1] - input[x * H + y - 1]) /
-				2;
-			// output[x*H + y] = Vector2(input[(x+1)*H + y] - input[x*H + y],
-			// input[x*H + y+1] - input[x*H + y]);
-		}
+	for (uint y = 1; y < H - 1; ++y) {
+#ifdef __AVX__
+		output[x * H + y] = Vector2(
+			input[(x + 1) * H + y] - input[(x - 1) * H + y],
+			input[x * H + y + 1] - input[x * H + y - 1]
+		);
+#else
+		output[x * H + y] = Vector2(
+			input[(x + 1) * H + y] - input[(x - 1) * H + y],
+			input[x * H + y + 1] - input[x * H + y - 1]
+		)*0.5;
+#endif
+	}
+#ifdef __AVX__
+	float *outf = reinterpret_cast<float*>(output);
+	for (uint i = 0;i < 2*W*H/8;++i) {
+		__m256 a = _mm256_load_ps(outf + i*8);
+		__m256 mul = _mm256_set1_ps(0.5);
+		__m256 result = _mm256_mul_ps(a,mul);
+		_mm256_store_ps(outf + i*8, result);
+	}
+#endif
 }
 
 void subtract(Vector2 *dst_vec, Vector2 *src_vec, uint W, uint H) {
@@ -103,7 +117,7 @@ class PhyBox {
 	Vector2 *v;		  // velocity
 	Vector2 *tmpMem;  // used for calculations
 	Vector2 *tmpMem2; // used for calculations
-	float *p;		  // pressure
+	alignas(32) float *p;		  // pressure
 	float viscosity = 0.01;
 
 	uint W, H;
@@ -113,8 +127,8 @@ class PhyBox {
 		assert((W * H) % 8 == 0);
 		v = new (std::align_val_t(32)) Vector2[W * H];
 		tmpMem = new (std::align_val_t(32)) Vector2[W * H];
-		tmpMem2 = new Vector2[W * H];
-		p = new float[W * H];
+		tmpMem2 = new (std::align_val_t(32)) Vector2[W * H];
+		p = new (std::align_val_t(32)) float[W * H];
 	}
 
 	~PhyBox() {
@@ -148,16 +162,6 @@ class PhyBox {
 			uint8_t g = static_cast<uint8_t>(sy * (v[i].y - min_y));
 			buffer[i] = (r << 16) | (g << 8) | 0x00;
 		}
-
-		/*
-		for (uint y = 0; y < H; ++y)
-		for (uint x = 0; x < W; ++x) {
-			uint8_t r = static_cast<uint8_t>(sx*(v[x*H+y].x - min_x));
-			uint8_t g = static_cast<uint8_t>(sy*(v[x*H+y].y - min_y));
-			//uint8_t b = static_cast<uint8_t>(mag2i % 256);
-			buffer[y*W + x] = (r << 16) | (g << 8) | 0x00;
-		}
-		*/
 	}
 
 	void impulse(uint x, uint y, uint fx, uint fy) {
@@ -194,10 +198,10 @@ class PhyBox {
   private:
 #ifdef __AVX__
 	void jacobi(float *x, float *b, float *mem, float alpha, float invbeta, uint iters = 50) {
-		__m256 mbeta = _mm256_set1_ps(invbeta);
 		for (uint t = 0; t < iters; ++t) {
 			for (uint i = 1; i < W - 1; ++i) {
-				for (uint j = 1; j < H - 1; j+=8) {
+				for (uint j = 1; j < H - 1; j+=1) {
+					/*
 					__m256 left  = _mm256_loadu_ps(&x[i * H + j - 1]);
 					__m256 right = _mm256_loadu_ps(&x[i * H + j + 1]);
 					__m256 up    = _mm256_loadu_ps(&x[(i - 1) * H + j]);
@@ -208,7 +212,16 @@ class PhyBox {
 					__m256 result = _mm256_add_ps(sum, alpha_b);
 					result = _mm256_mul_ps(result, mbeta);
 					_mm256_storeu_ps(&mem[i * H + j], result);
+					*/
+
+					mem[i * H + j] = (x[(i - 1) * H + j] + x[(i + 1) * H + j] + x[i * H + j - 1] + x[i * H + j + 1] + alpha * b[i * H + j]);
 				}
+			}
+			for (uint i = 0;i < W*H/8;i++) {
+				__m256 vals = _mm256_load_ps(mem + i*8);
+				__m256 mbeta = _mm256_set1_ps(invbeta);
+				__m256 res = _mm256_mul_ps(vals,mbeta);
+				_mm256_store_ps(mem + i*8, res);
 			}
 			std::swap(x,mem);
 		}
@@ -218,8 +231,15 @@ class PhyBox {
 		for (uint t = 0; t < iters; ++t) {
 			for (uint i = 1; i < W - 1; ++i) {
 				for (uint j = 1; j < H - 1; ++j) {
-					mem[i * H + j] = (x[(i - 1) * H + j] + x[(i + 1) * H + j] + x[i * H + j - 1] + x[i * H + j + 1] + alpha * b[i * H + j]) * invbeta;
+					mem[i * H + j] = (x[(i - 1) * H + j] + x[(i + 1) * H + j] + x[i * H + j - 1] + x[i * H + j + 1] + alpha * b[i * H + j]);
 				}
+			}
+			float *fmem = reinterpret_cast<float*>(mem);
+			for (uint i = 0;i < 2*W*H/8;i++) {
+				__m256 vals = _mm256_load_ps(fmem + i*8);
+				__m256 mbeta = _mm256_set1_ps(invbeta);
+				__m256 res = _mm256_mul_ps(vals,mbeta);
+				_mm256_store_ps(fmem + i*8, res);
 			}
 			std::swap(x,mem);
 		}
@@ -286,13 +306,12 @@ class PhyBox {
 
 	void diffuse(Vector2 *vecfield, float dt = 1) {
 		float alpha = 1 / (viscosity * dt);
-		memcpy(vecfield, v, W * H * sizeof(Vector2));
-		jacobi(v, vecfield, tmpMem2, alpha, 1.0 / (4.0 + alpha));
+		jacobi(v, vecfield, tmpMem2, alpha, 1.0 / (4.0 + alpha), 50);
 	}
 
 	void updatePressure(float *mem) {
 		divergence(mem);
-		jacobi(p, mem, reinterpret_cast<float *>(tmpMem2), -1, 0.25);
+		jacobi(p, mem, reinterpret_cast<float *>(tmpMem2), -1, 0.25, 50);
 	}
 };
 
@@ -317,6 +336,7 @@ int main() {
 	params.viscosity = 0.005;
 	params.shc = 1;
 	PhyBox pb(600, 600);
+	//PhyBox pb(1200, 1200);
 
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 		printf("error initializing SDL: %s\n", SDL_GetError());
