@@ -124,13 +124,13 @@ class PhyBox {
 	Vector2 *v;		  // velocity
 	Vector2 *tmpMem;  // used for calculations
 	Vector2 *tmpMem2; // used for calculations
-	MouseState mouse;
 	alignas(32) float *p;		  // pressure
 	float viscosity = 0.01;
 
 	uint W, H;
 
   public:
+	MouseState mouse;
 	PhyBox(uint width, uint height) : W(width), H(height) {
 		assert((W * H) % 8 == 0);
 		v = new (std::align_val_t(32)) Vector2[W * H];
@@ -149,7 +149,7 @@ class PhyBox {
 		delete[] tmpMem;
 	}
 
-	void updateBuffer(uint32_t *buffer) {
+	void updateBuffer(SDL_Renderer *renderer, uint32_t *buffer) {
 		float max_x, min_x, max_y, min_y;
 
 #ifdef SCALE
@@ -174,22 +174,20 @@ class PhyBox {
 			uint8_t g = static_cast<uint8_t>(sy * (v[i].y - min_y));
 			buffer[i] = (r << 16) | (g << 8) | 0x00;
 		}
+	}
 
-		if (mouse.down == nullptr)
-			return;
-
+	void impulse() {
 		Vector2 diff = mouse.pos - *mouse.down;
 		for (float i = 0;i < 1;i += 0.1) {
 			Vector2 pt = *mouse.down + i*diff;
-			cout << pt << endl;
 			for (int a = -LINE_WIDTH;a < LINE_WIDTH;++a)
 			for (int b = -LINE_WIDTH;b < LINE_WIDTH;++b) {
 				Vector2 ept = pt + Vector2(a,b);
-				if (ept.x < W && ept.y < H && ept.x > 0 && ept.y > 0)
-					buffer[(uint32_t)(W*ept.y + ept.x)] = 0xffffffff;
+				ept.x = min(max(0.0f,ept.x), (float)W-1);
+				ept.y = min(max(0.0f,ept.y), (float)H-1);
+				v[(uint32_t)ept.x*H + (uint32_t)ept.y] += diff;
 			}
 		}
-		cout << "---" << endl;
 	}
 
 	void down(uint x, uint y) {
@@ -213,16 +211,6 @@ class PhyBox {
 			return;
 		mouse.pos.x = x;
 		mouse.pos.y = y;
-	}
-
-	void impulse() {
-		cout << "impulse" << endl;
-		/*
-		for (uint i = 0; i < 100; ++i)
-			for (uint j = 0; j < 100; ++j)
-				v[(min(x + i, W - 1)) * H + min(y + j, H - 1)] +=
-					Vector2(fx, fy);
-		*/
 	}
 
 	void setBlocks(uint xs, uint ys, uint xe, uint ye) {
@@ -378,13 +366,13 @@ void handle_click(SDL_MouseButtonEvent &e, PhyBox &pb, bool down) {
 	if (e.button != 1)
 		return;
 	if (down)
-		pb.down(e.x, e.y);
+		pb.down(e.y, e.x);
 	else
-		pb.up(e.x, e.y);
+		pb.up(e.y, e.x);
 }
 
 void handle_motion(SDL_MouseMotionEvent &e, PhyBox &pb) {
-	pb.handle_motion(e.x, e.y);
+	pb.handle_motion(e.y, e.x);
 }
 
 int main() {
@@ -452,12 +440,16 @@ int main() {
 		}
 
 		pb.forward(0.3);
-		pb.updateBuffer(buffer);
+		pb.updateBuffer(renderer, buffer);
 
 		SDL_UpdateTexture(texture, nullptr, buffer,
 						  pb.width() * sizeof(uint32_t));
 		SDL_RenderClear(renderer);
 		SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+		if (pb.mouse.down != nullptr) {
+			SDL_SetRenderDrawColor(renderer, 0xff, 0xff, 0xff, 0xff); // Example: Red line
+			SDL_RenderDrawLine(renderer, pb.mouse.down->y, pb.mouse.down->x, pb.mouse.pos.y, pb.mouse.pos.x);
+		}
 		SDL_RenderPresent(renderer);
 
 		if (++ctr % thresh == 0) {
