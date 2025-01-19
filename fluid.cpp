@@ -2,6 +2,8 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_timer.h>
 
+#define LINE_WIDTH 5
+
 #include <cmath>
 #include <limits>
 #ifdef __AVX__
@@ -113,10 +115,16 @@ void subtract(Vector2 *dst_vec, Vector2 *src_vec, uint W, uint H) {
 #endif
 }
 
+struct MouseState {
+	Vector2 *down;
+	Vector2 pos;
+};
+
 class PhyBox {
 	Vector2 *v;		  // velocity
 	Vector2 *tmpMem;  // used for calculations
 	Vector2 *tmpMem2; // used for calculations
+	MouseState mouse;
 	alignas(32) float *p;		  // pressure
 	float viscosity = 0.01;
 
@@ -129,6 +137,10 @@ class PhyBox {
 		tmpMem = new (std::align_val_t(32)) Vector2[W * H];
 		tmpMem2 = new (std::align_val_t(32)) Vector2[W * H];
 		p = new (std::align_val_t(32)) float[W * H];
+		mouse = MouseState {
+			down: nullptr,
+			pos: Vector2(0,0),
+		};
 	}
 
 	~PhyBox() {
@@ -162,13 +174,55 @@ class PhyBox {
 			uint8_t g = static_cast<uint8_t>(sy * (v[i].y - min_y));
 			buffer[i] = (r << 16) | (g << 8) | 0x00;
 		}
+
+		if (mouse.down == nullptr)
+			return;
+
+		Vector2 diff = mouse.pos - *mouse.down;
+		for (float i = 0;i < 1;i += 0.1) {
+			Vector2 pt = *mouse.down + i*diff;
+			cout << pt << endl;
+			for (int a = -LINE_WIDTH;a < LINE_WIDTH;++a)
+			for (int b = -LINE_WIDTH;b < LINE_WIDTH;++b) {
+				Vector2 ept = pt + Vector2(a,b);
+				if (ept.x < W && ept.y < H && ept.x > 0 && ept.y > 0)
+					buffer[(uint32_t)(W*ept.y + ept.x)] = 0xffffffff;
+			}
+		}
+		cout << "---" << endl;
 	}
 
-	void impulse(uint x, uint y, uint fx, uint fy) {
+	void down(uint x, uint y) {
+		mouse.down = new Vector2(x,y);
+		mouse.pos.x = x;
+		mouse.pos.y = y;
+	}
+
+	void up(uint x, uint y) {
+		if (mouse.down == nullptr)
+			return;
+		impulse();
+		delete mouse.down;
+		mouse.down = nullptr;
+		mouse.pos.x = x;
+		mouse.pos.y = y;
+	}
+
+	void handle_motion(uint x, uint y) {
+		if (mouse.down == nullptr)
+			return;
+		mouse.pos.x = x;
+		mouse.pos.y = y;
+	}
+
+	void impulse() {
+		cout << "impulse" << endl;
+		/*
 		for (uint i = 0; i < 100; ++i)
 			for (uint j = 0; j < 100; ++j)
 				v[(min(x + i, W - 1)) * H + min(y + j, H - 1)] +=
 					Vector2(fx, fy);
+		*/
 	}
 
 	void setBlocks(uint xs, uint ys, uint xe, uint ye) {
@@ -320,15 +374,17 @@ struct Params {
 	float shc;
 };
 
-void handle_click(SDL_MouseButtonEvent &e, PhyBox &pb) {
-	switch (e.button) {
-		case 1: // left click
-			pb.impulse(e.y, e.x, 30, 0);
-			break;
-		case 3: // right click
-			pb.impulse(e.y, e.x, 0, 30);
-			break;
-	}
+void handle_click(SDL_MouseButtonEvent &e, PhyBox &pb, bool down) {
+	if (e.button != 1)
+		return;
+	if (down)
+		pb.down(e.x, e.y);
+	else
+		pb.up(e.x, e.y);
+}
+
+void handle_motion(SDL_MouseMotionEvent &e, PhyBox &pb) {
+	pb.handle_motion(e.x, e.y);
 }
 
 int main() {
@@ -383,8 +439,14 @@ int main() {
 				case SDL_QUIT:
 					running = false;
 					break;
+				case SDL_MOUSEMOTION:
+					handle_motion(event.motion, pb);
+					break;
 				case SDL_MOUSEBUTTONDOWN:
-					handle_click(event.button, pb);
+					handle_click(event.button, pb, true);
+					break;
+				case SDL_MOUSEBUTTONUP:
+					handle_click(event.button, pb, false);
 					break;
 			}
 		}
